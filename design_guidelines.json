@@ -1,0 +1,156 @@
+{
+  "typography": {
+    "fonts": {
+      "headings": {
+        "family": "Manrope, sans-serif",
+        "weights": ["600", "700", "800"],
+        "usage": "Page titles, card headers, massive metrics"
+      },
+      "body": {
+        "family": "Public Sans, sans-serif",
+        "weights": ["400", "500", "600"],
+        "usage": "General text, form labels, navigation"
+      },
+      "mono": {
+        "family": "JetBrains Mono, monospace",
+        "weights": ["400", "500"],
+        "usage": "Data tables, logs, JSON snippets, ID numbers"
+      }
+    },
+    "scales": {
+      "h1": "text-4xl md:text-5xl font-extrabold tracking-tight leading-none",
+      "h2": "text-3xl font-bold tracking-tight",
+      "h3": "text-xl font-semibold tracking-normal",
+      "body": "text-sm md:text-base leading-relaxed text-slate-600 dark:text-slate-400",
+      "caption": "text-xs font-medium text-slate-500 uppercase tracking-wider"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Electric Cobalt",
+        "hex": "#2563EB",
+        "usage": "Primary actions, active states, key data points"
+      },
+      "accent": {
+        "name": "Signal Orange",
+        "hex": "#F97316",
+        "usage": "Processing status, alerts, 'Action Required' indicators"
+      },
+      "background": {
+        "light": "#F8FAFC",
+        "dark": "#0F172A",
+        "surface_light": "#FFFFFF",
+        "surface_dark": "#1E293B"
+      },
+      "status": {
+        "success": "#10B981",
+        "warning": "#F59E0B",
+        "error": "#F43F5E",
+        "info": "#3B82F6"
+      }
+    },
+    "utility_classes": {
+      "surface": "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800",
+      "surface_hover": "hover:bg-slate-50 dark:hover:bg-slate-800/50",
+      "text_primary": "text-slate-900 dark:text-slate-50",
+      "text_secondary": "text-slate-500 dark:text-slate-400"
+    }
+  },
+  "components": {
+    "card": {
+      "style": "rounded-sm border border-slate-200 dark:border-slate-800 bg-card text-card-foreground shadow-sm",
+      "spacing": "p-6"
+    },
+    "button": {
+      "primary": "rounded-md bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-sm transition-all active:scale-95",
+      "secondary": "rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 font-medium",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-md",
+      "destructive": "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+    },
+    "input": {
+      "style": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    },
+    "badge": {
+      "style": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      "variants": {
+        "default": "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+        "secondary": "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        "destructive": "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
+        "outline": "text-foreground"
+      }
+    }
+  },
+  "layout_strategies": {
+    "dashboard_grid": {
+      "type": "Bento Grid Mode B",
+      "classes": "grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 auto-rows-fr",
+      "usage": "Main analytics dashboard"
+    },
+    "split_view": {
+      "type": "Review Interface",
+      "classes": "grid grid-cols-1 lg:grid-cols-2 h-[calc(100vh-4rem)] overflow-hidden",
+      "usage": "Document review page (Left: PDF Preview, Right: Extraction Form)"
+    },
+    "container": {
+      "base": "container mx-auto px-4 md:px-8 max-w-7xl",
+      "fluid": "w-full px-4 md:px-8"
+    }
+  },
+  "motion": {
+    "transitions": {
+      "default": "transition-all duration-200 ease-in-out",
+      "hover": "hover:-translate-y-1 hover:shadow-md duration-300"
+    },
+    "animation_classes": {
+      "fade_in": "animate-in fade-in zoom-in-95 duration-300",
+      "slide_up": "animate-in slide-in-from-bottom-4 fade-in duration-500"
+    }
+  },
+  "accessibility": {
+    "focus_ring": "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500",
+    "screen_reader": "sr-only",
+    "contrast_check": "Ensure text-slate-500 is not used on dark backgrounds without verification"
+  },
+  "assets": {
+    "images": {
+      "login_bg": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1920&q=80",
+      "document_placeholder": "https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&w=800&q=80",
+      "processing_bg": "https://images.unsplash.com/photo-1558494949-ef526b01201b?auto=format&fit=crop&w=1920&q=80",
+      "empty_state_dashboard": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80"
+    },
+    "icons": {
+      "library": "lucide-react",
+      "preferred": ["FileText", "LayoutDashboard", "Settings", "Workflow", "CheckCircle2", "AlertCircle", "Loader2"]
+    }
+  },
+  "instructions_to_main_agent": {
+    "general": [
+      "Implement a toggle for Light/Dark mode in the top navigation bar.",
+      "Use 'Sonner' for all toast notifications (success/error).",
+      "Ensure all charts (Recharts) are responsive and use the defined palette colors.",
+      "For the 'Review' page, use a split-pane layout with the document on the left and form on the right.",
+      "Use 'Skeleton' loaders for all data-fetching states."
+    ],
+    "dashboard_specifics": [
+      "The dashboard should use the 'Bento Grid' layout.",
+      "Top cards: Summary metrics (Total Docs, Success Rate, Processing Time).",
+      "Middle section: Charts (Docs over time, Success vs Failure).",
+      "Bottom section: Recent activity table."
+    ],
+    "workflow_page": [
+      "Implement as a multi-step wizard: Config -> Upload -> Mode -> Run.",
+      "Use a real-time log viewer component (simulated or real websocket) with auto-scroll."
+    ],
+    "file_handling": [
+      "Use 'react-dropzone' or similar for file uploads (if available, else standard input).",
+      "Display file size and type validation errors using Sonner."
+    ]
+  },
+  "universal_guidelines": [
+    "Do not use gradients for backgrounds unless specified.",
+    "Avoid 'Inter' for headings; use 'Manrope'.",
+    "Ensure all interactive elements have hover states.",
+    "Use 'data-testid' for all key actionable elements."
+  ]
+}
