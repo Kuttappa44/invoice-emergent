@@ -97,6 +97,10 @@ export const documentsApi = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+  reextract: (id, templateId = null) => {
+    const params = templateId ? `?template_id=${templateId}` : "";
+    return api.post(`/documents/${id}/reextract${params}`);
+  },
   review: (id, action, updatedFields = null) => {
     const params = new URLSearchParams({ action });
     return api.put(`/documents/${id}/review?${params}`, updatedFields);

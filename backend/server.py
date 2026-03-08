@@ -877,22 +877,34 @@ async def upload_document(
         if template:
             fields = [FieldDefinition(**f) for f in template.get("fields", [])]
     
-    # Extract fields if template has fields
+    # If no template, use default invoice fields for extraction
+    if not fields:
+        fields = [
+            FieldDefinition(name="invoice_number", field_type="text", description="Invoice or bill number"),
+            FieldDefinition(name="date", field_type="date", description="Invoice or document date"),
+            FieldDefinition(name="total_amount", field_type="currency", description="Total amount"),
+            FieldDefinition(name="vendor_name", field_type="text", description="Vendor or company name"),
+            FieldDefinition(name="customer_name", field_type="text", description="Customer or recipient name"),
+            FieldDefinition(name="description", field_type="text", description="Description or line items summary"),
+        ]
+    
+    # Extract fields
     extracted_data = {}
     confidence_scores = {}
     
-    if fields:
-        # Save to temp file for AI processing
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        
-        try:
-            result = await extract_fields_with_ai(tmp_path, file_ext, fields)
-            extracted_data = result.get("fields", {})
-            confidence_scores = result.get("confidence", {})
-        finally:
-            os.unlink(tmp_path)
+    # Save to temp file for AI processing
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    
+    try:
+        result = await extract_fields_with_ai(tmp_path, file_ext, fields)
+        extracted_data = result.get("fields", {})
+        confidence_scores = result.get("confidence", {})
+    except Exception as e:
+        logger.error(f"Extraction failed: {e}")
+    finally:
+        os.unlink(tmp_path)
     
     # Create document record
     doc_obj = ExtractedDocument(
@@ -911,6 +923,74 @@ async def upload_document(
     return {
         "id": doc_obj.id,
         "storage_path": storage_path,
+        "extracted_fields": extracted_data,
+        "confidence_scores": confidence_scores
+    }
+
+# Re-extract document with specific template
+@api_router.post("/documents/{doc_id}/reextract")
+async def reextract_document(doc_id: str, template_id: Optional[str] = None):
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    storage_path = doc.get("storage_path")
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="Document file not found in storage")
+    
+    # Get file content from storage
+    try:
+        content, content_type = get_object(storage_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not retrieve file: {e}")
+    
+    # Get template fields
+    fields = []
+    if template_id:
+        template = await db.templates.find_one({"id": template_id}, {"_id": 0})
+        if template:
+            fields = [FieldDefinition(**f) for f in template.get("fields", [])]
+    
+    # If no template, use default fields
+    if not fields:
+        fields = [
+            FieldDefinition(name="invoice_number", field_type="text", description="Invoice or bill number"),
+            FieldDefinition(name="date", field_type="date", description="Invoice or document date"),
+            FieldDefinition(name="total_amount", field_type="currency", description="Total amount"),
+            FieldDefinition(name="vendor_name", field_type="text", description="Vendor or company name"),
+            FieldDefinition(name="customer_name", field_type="text", description="Customer or recipient name"),
+            FieldDefinition(name="description", field_type="text", description="Description or line items summary"),
+        ]
+    
+    # Get file extension
+    file_ext = storage_path.split('.')[-1].lower() if '.' in storage_path else 'pdf'
+    
+    # Save to temp file for AI processing
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    
+    try:
+        result = await extract_fields_with_ai(tmp_path, file_ext, fields)
+        extracted_data = result.get("fields", {})
+        confidence_scores = result.get("confidence", {})
+    except Exception as e:
+        logger.error(f"Re-extraction failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {e}")
+    finally:
+        os.unlink(tmp_path)
+    
+    # Update document
+    await db.documents.update_one(
+        {"id": doc_id},
+        {"$set": {
+            "extracted_fields": extracted_data,
+            "confidence_scores": confidence_scores
+        }}
+    )
+    
+    return {
+        "id": doc_id,
         "extracted_fields": extracted_data,
         "confidence_scores": confidence_scores
     }

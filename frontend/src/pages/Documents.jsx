@@ -92,16 +92,50 @@ export function Documents() {
   const handleExport = async () => {
     try {
       const response = await documentsApi.export(null, "csv");
-      const blob = new Blob([response.data], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `documents_export_${new Date().toISOString().split("T")[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      // Handle both blob and string responses
+      let blob;
+      if (response.data instanceof Blob) {
+        blob = response.data;
+      } else {
+        blob = new Blob([response.data], { type: "text/csv;charset=utf-8" });
+      }
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `documents_export_${new Date().toISOString().split("T")[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
       toast.success("Export completed");
     } catch (error) {
+      console.error("Export error:", error);
       toast.error("Export failed");
+    }
+  };
+
+  const handleReextract = async (docId) => {
+    try {
+      toast.info("Re-extracting document...");
+      const response = await documentsApi.reextract(docId);
+      setDocuments((prev) =>
+        prev.map((d) =>
+          d.id === docId
+            ? { ...d, extracted_fields: response.data.extracted_fields, confidence_scores: response.data.confidence_scores }
+            : d
+        )
+      );
+      if (selectedDocument?.id === docId) {
+        setSelectedDocument((prev) => ({
+          ...prev,
+          extracted_fields: response.data.extracted_fields,
+          confidence_scores: response.data.confidence_scores,
+        }));
+      }
+      toast.success("Re-extraction completed");
+    } catch (error) {
+      console.error("Re-extract error:", error);
+      toast.error("Re-extraction failed");
     }
   };
 
@@ -373,33 +407,46 @@ export function Documents() {
               )}
 
               {/* Actions */}
-              <div className="flex gap-2">
+              <div className="space-y-3">
+                {/* Re-extract button */}
                 <Button
                   variant="outline"
-                  className="flex-1"
-                  onClick={() => handleReview(selectedDocument.id, "flagged")}
-                  data-testid="flag-btn"
+                  className="w-full"
+                  onClick={() => handleReextract(selectedDocument.id)}
+                  data-testid="reextract-btn"
                 >
-                  <Flag className="h-4 w-4 mr-2" />
-                  Flag
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Re-extract with AI
                 </Button>
-                <Button
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => handleReview(selectedDocument.id, "rejected")}
-                  data-testid="reject-btn"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Reject
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => handleReview(selectedDocument.id, "approved")}
-                  data-testid="approve-btn"
-                >
-                  <Check className="h-4 w-4 mr-2" />
-                  Approve
-                </Button>
+                
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => handleReview(selectedDocument.id, "flagged")}
+                    data-testid="flag-btn"
+                  >
+                    <Flag className="h-4 w-4 mr-2" />
+                    Flag
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => handleReview(selectedDocument.id, "rejected")}
+                    data-testid="reject-btn"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Reject
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => handleReview(selectedDocument.id, "approved")}
+                    data-testid="approve-btn"
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    Approve
+                  </Button>
+                </div>
               </div>
             </div>
           )}
