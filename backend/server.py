@@ -254,10 +254,13 @@ If a field cannot be found, use null as the value and 0.0 as confidence."""
             "jpg": "image/jpeg",
             "jpeg": "image/jpeg",
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "txt": "text/plain",
+            "csv": "text/csv",
+            "json": "application/json"
         }
         
-        mime_type = mime_types.get(file_type.lower(), "application/octet-stream")
+        mime_type = mime_types.get(file_type.lower(), "application/pdf")
         
         chat = LlmChat(
             api_key=EMERGENT_KEY,
@@ -327,10 +330,13 @@ Common field types:
             "jpg": "image/jpeg",
             "jpeg": "image/jpeg",
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "txt": "text/plain",
+            "csv": "text/csv",
+            "json": "application/json"
         }
         
-        mime_type = mime_types.get(file_type.lower(), "application/octet-stream")
+        mime_type = mime_types.get(file_type.lower(), "application/pdf")
         
         chat = LlmChat(
             api_key=EMERGENT_KEY,
@@ -738,6 +744,16 @@ async def get_workflow_run(run_id: str):
         run['completed_at'] = datetime.fromisoformat(run['completed_at'].replace('Z', '+00:00'))
     return run
 
+# Delete workflow run
+@api_router.delete("/workflows/{run_id}")
+async def delete_workflow_run(run_id: str):
+    result = await db.workflow_runs.delete_one({"id": run_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+    # Also delete associated documents
+    await db.documents.delete_many({"workflow_run_id": run_id})
+    return {"message": "Workflow run deleted"}
+
 # Start workflow execution (simulated for MVP without Gmail OAuth)
 @api_router.post("/workflows/{run_id}/start")
 async def start_workflow(run_id: str):
@@ -814,6 +830,13 @@ async def get_document(doc_id: str):
     if doc.get('email_date') and isinstance(doc['email_date'], str):
         doc['email_date'] = datetime.fromisoformat(doc['email_date'].replace('Z', '+00:00'))
     return doc
+
+@api_router.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str):
+    result = await db.documents.delete_one({"id": doc_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "Document deleted"}
 
 @api_router.put("/documents/{doc_id}/review")
 async def review_document(doc_id: str, action: str = Query(...), updated_fields: Optional[Dict[str, Any]] = None):
