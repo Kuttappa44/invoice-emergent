@@ -6,6 +6,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Configurations } from "./pages/Configurations";
 import { Templates } from "./pages/Templates";
 import { Workflow } from "./pages/Workflow";
+import { Documents } from "./pages/Documents";
 import "./App.css";
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
             <Route path="/configurations" element={<Configurations />} />
             <Route path="/templates" element={<Templates />} />
             <Route path="/workflow" element={<Workflow />} />
+            <Route path="/documents" element={<Documents />} />
           </Routes>
         </Layout>
         <Toaster position="top-right" richColors />

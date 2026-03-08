@@ -15,7 +15,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "../components/ui/dialog";
 import {
@@ -37,6 +36,14 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../components/ui/table";
+import {
   Plus,
   Settings,
   Trash2,
@@ -48,6 +55,11 @@ import {
   Link,
   FileText,
   Loader2,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,7 +74,7 @@ const defaultConfig = {
   },
   email_provider: {
     provider_type: "gmail",
-    host: "",
+    host: "imap.gmail.com",
     port: 993,
     username: "",
     password: "",
@@ -94,6 +106,15 @@ const defaultConfig = {
   },
 };
 
+const MATCH_TYPES = [
+  { value: "exact", label: "Exact Match" },
+  { value: "case_insensitive", label: "Case Insensitive" },
+  { value: "contains", label: "Contains" },
+  { value: "fuzzy", label: "Fuzzy Match (≥80%)" },
+  { value: "numeric_tolerance", label: "Numeric Tolerance" },
+  { value: "date_tolerance", label: "Date Tolerance" },
+];
+
 export function Configurations() {
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +123,8 @@ export function Configurations() {
   const [selectedConfig, setSelectedConfig] = useState(null);
   const [formData, setFormData] = useState(defaultConfig);
   const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
 
   useEffect(() => {
     fetchConfigs();
@@ -194,6 +217,86 @@ export function Configurations() {
     }
   };
 
+  const addMatchingRule = () => {
+    setFormData((prev) => ({
+      ...prev,
+      matching_logic: {
+        ...prev.matching_logic,
+        rules: [
+          ...prev.matching_logic.rules,
+          { field_name: "", match_type: "exact", tolerance_value: null, priority: prev.matching_logic.rules.length + 1 },
+        ],
+      },
+    }));
+  };
+
+  const updateMatchingRule = (index, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      matching_logic: {
+        ...prev.matching_logic,
+        rules: prev.matching_logic.rules.map((rule, i) =>
+          i === index ? { ...rule, [field]: value } : rule
+        ),
+      },
+    }));
+  };
+
+  const removeMatchingRule = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      matching_logic: {
+        ...prev.matching_logic,
+        rules: prev.matching_logic.rules.filter((_, i) => i !== index),
+      },
+    }));
+  };
+
+  const addFieldMapping = () => {
+    const key = `extracted_field_${Object.keys(formData.matching_source.field_mappings).length + 1}`;
+    setFormData((prev) => ({
+      ...prev,
+      matching_source: {
+        ...prev.matching_source,
+        field_mappings: {
+          ...prev.matching_source.field_mappings,
+          [key]: "",
+        },
+      },
+    }));
+  };
+
+  const updateFieldMapping = (oldKey, newKey, newValue) => {
+    setFormData((prev) => {
+      const newMappings = { ...prev.matching_source.field_mappings };
+      if (oldKey !== newKey) {
+        delete newMappings[oldKey];
+      }
+      newMappings[newKey] = newValue;
+      return {
+        ...prev,
+        matching_source: {
+          ...prev.matching_source,
+          field_mappings: newMappings,
+        },
+      };
+    });
+  };
+
+  const removeFieldMapping = (key) => {
+    setFormData((prev) => {
+      const newMappings = { ...prev.matching_source.field_mappings };
+      delete newMappings[key];
+      return {
+        ...prev,
+        matching_source: {
+          ...prev.matching_source,
+          field_mappings: newMappings,
+        },
+      };
+    });
+  };
+
   if (loading) {
     return <ConfigurationsSkeleton />;
   }
@@ -255,10 +358,12 @@ export function Configurations() {
                     <Mail className="h-3 w-3 mr-1" />
                     {config.email_provider?.provider_type || "Email"}
                   </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    <Database className="h-3 w-3 mr-1" />
-                    {config.database_config?.db_type || "DB"}
-                  </Badge>
+                  {config.email_provider?.username && (
+                    <Badge variant="secondary" className="text-xs">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Credentials Set
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -307,7 +412,7 @@ export function Configurations() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {selectedConfig ? "Edit Configuration" : "New Configuration"}
@@ -318,12 +423,13 @@ export function Configurations() {
           </DialogHeader>
 
           <Tabs defaultValue="general" className="mt-4">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="ai">AI</TabsTrigger>
               <TabsTrigger value="email">Email</TabsTrigger>
               <TabsTrigger value="storage">Storage</TabsTrigger>
-              <TabsTrigger value="matching">Matching</TabsTrigger>
+              <TabsTrigger value="matching-source">Source</TabsTrigger>
+              <TabsTrigger value="matching-rules">Rules</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="space-y-4 mt-4">
@@ -388,15 +494,6 @@ export function Configurations() {
                   data-testid="ai-key-input"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Custom API Endpoint (Optional)</Label>
-                <Input
-                  placeholder="https://api.openai.com/v1"
-                  value={formData.ai_provider.api_endpoint || ""}
-                  onChange={(e) => updateFormField("ai_provider", "api_endpoint", e.target.value)}
-                  data-testid="ai-endpoint-input"
-                />
-              </div>
             </TabsContent>
 
             <TabsContent value="email" className="space-y-4 mt-4">
@@ -404,39 +501,82 @@ export function Configurations() {
                 <Label>Email Provider</Label>
                 <Select
                   value={formData.email_provider.provider_type}
-                  onValueChange={(v) => updateFormField("email_provider", "provider_type", v)}
+                  onValueChange={(v) => {
+                    updateFormField("email_provider", "provider_type", v);
+                    if (v === "gmail") {
+                      updateFormField("email_provider", "host", "imap.gmail.com");
+                      updateFormField("email_provider", "port", 993);
+                    }
+                  }}
                 >
                   <SelectTrigger data-testid="email-provider-select">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gmail">Gmail (OAuth)</SelectItem>
+                    <SelectItem value="gmail">Gmail (IMAP with App Password)</SelectItem>
+                    <SelectItem value="outlook">Outlook (IMAP)</SelectItem>
                     <SelectItem value="imap">Custom IMAP</SelectItem>
-                    <SelectItem value="outlook">Outlook (OAuth)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
+              {/* Gmail Instructions */}
               {formData.email_provider.provider_type === "gmail" && (
-                <Card className="bg-muted/50">
+                <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Gmail OAuth</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formData.email_provider.oauth_connected
-                            ? `Connected: ${formData.email_provider.connected_email}`
-                            : "Not connected - Connect during workflow"}
-                        </p>
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                      <div className="text-sm">
+                        <p className="font-medium text-blue-800 dark:text-blue-200">Gmail App Password Required</p>
+                        <ol className="mt-2 space-y-1 text-blue-700 dark:text-blue-300 list-decimal list-inside">
+                          <li>Go to your <a href="https://myaccount.google.com/security" target="_blank" rel="noopener noreferrer" className="underline">Google Account Security</a></li>
+                          <li>Enable 2-Step Verification if not already enabled</li>
+                          <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="underline">App Passwords</a></li>
+                          <li>Create a new app password for "Mail"</li>
+                          <li>Copy the 16-character password below</li>
+                        </ol>
                       </div>
-                      <Badge variant={formData.email_provider.oauth_connected ? "default" : "secondary"}>
-                        {formData.email_provider.oauth_connected ? "Connected" : "Pending"}
-                      </Badge>
                     </div>
                   </CardContent>
                 </Card>
               )}
 
+              {/* Email Credentials */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Email Address (Username)</Label>
+                  <Input
+                    type="email"
+                    placeholder="your-email@gmail.com"
+                    value={formData.email_provider.username || ""}
+                    onChange={(e) => updateFormField("email_provider", "username", e.target.value)}
+                    data-testid="email-username-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>App Password</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="xxxx xxxx xxxx xxxx"
+                      value={formData.email_provider.password || ""}
+                      onChange={(e) => updateFormField("email_provider", "password", e.target.value)}
+                      data-testid="email-password-input"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* IMAP Settings (for custom IMAP) */}
               {formData.email_provider.provider_type === "imap" && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -456,31 +596,29 @@ export function Configurations() {
                       onChange={(e) => updateFormField("email_provider", "port", parseInt(e.target.value))}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Username</Label>
-                    <Input
-                      placeholder="email@example.com"
-                      value={formData.email_provider.username || ""}
-                      onChange={(e) => updateFormField("email_provider", "username", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Password</Label>
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      value={formData.email_provider.password || ""}
-                      onChange={(e) => updateFormField("email_provider", "password", e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 col-span-2">
-                    <Switch
-                      checked={formData.email_provider.use_ssl}
-                      onCheckedChange={(v) => updateFormField("email_provider", "use_ssl", v)}
-                    />
-                    <Label>Use SSL</Label>
-                  </div>
                 </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={formData.email_provider.use_ssl}
+                  onCheckedChange={(v) => updateFormField("email_provider", "use_ssl", v)}
+                />
+                <Label>Use SSL/TLS</Label>
+              </div>
+
+              {/* Connection Status */}
+              {formData.email_provider.username && formData.email_provider.password && (
+                <Card className="bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                        Credentials configured for {formData.email_provider.username}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
             </TabsContent>
 
@@ -515,7 +653,7 @@ export function Configurations() {
               </div>
             </TabsContent>
 
-            <TabsContent value="matching" className="space-y-4 mt-4">
+            <TabsContent value="matching-source" className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label>Matching Source Type</Label>
                 <Select
@@ -533,14 +671,165 @@ export function Configurations() {
                   </SelectContent>
                 </Select>
               </div>
-              <Card className="bg-muted/50">
-                <CardContent className="p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Matching rules can be configured after creating field templates.
-                    Define matching keys and comparison methods for each extracted field.
+
+              {/* Field Mappings */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label>Field Mappings</Label>
+                  <Button variant="outline" size="sm" onClick={addFieldMapping}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Mapping
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Map extracted fields to source fields (e.g., extracted.invoice_number → source.invoiceNum)
+                </p>
+
+                {Object.entries(formData.matching_source.field_mappings).length > 0 ? (
+                  <div className="space-y-2">
+                    {Object.entries(formData.matching_source.field_mappings).map(([key, value], index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Input
+                          placeholder="Extracted Field"
+                          value={key}
+                          onChange={(e) => updateFieldMapping(key, e.target.value, value)}
+                          className="flex-1"
+                        />
+                        <span className="text-muted-foreground">→</span>
+                        <Input
+                          placeholder="Source Field"
+                          value={value}
+                          onChange={(e) => updateFieldMapping(key, key, e.target.value)}
+                          className="flex-1"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive"
+                          onClick={() => removeFieldMapping(key)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="bg-muted/50">
+                    <CardContent className="p-4 text-center text-sm text-muted-foreground">
+                      No field mappings defined. Add mappings to connect extracted fields with source data.
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="matching-rules" className="space-y-4 mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Matching Rules</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Define how extracted fields should be matched against source data
                   </p>
-                </CardContent>
-              </Card>
+                </div>
+                <Button variant="outline" size="sm" onClick={addMatchingRule} data-testid="add-rule-btn">
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Rule
+                </Button>
+              </div>
+
+              {formData.matching_logic.rules.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Field Name</TableHead>
+                        <TableHead>Match Type</TableHead>
+                        <TableHead>Tolerance</TableHead>
+                        <TableHead className="w-[60px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {formData.matching_logic.rules.map((rule, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={rule.priority}
+                              onChange={(e) => updateMatchingRule(index, "priority", parseInt(e.target.value))}
+                              className="w-16 h-8"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              placeholder="e.g., invoice_number"
+                              value={rule.field_name}
+                              onChange={(e) => updateMatchingRule(index, "field_name", e.target.value)}
+                              className="h-8"
+                              data-testid={`rule-field-${index}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={rule.match_type}
+                              onValueChange={(v) => updateMatchingRule(index, "match_type", v)}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {MATCH_TYPES.map((type) => (
+                                  <SelectItem key={type.value} value={type.value}>
+                                    {type.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            {(rule.match_type === "numeric_tolerance" || rule.match_type === "date_tolerance") && (
+                              <Input
+                                type="number"
+                                placeholder="±"
+                                value={rule.tolerance_value || ""}
+                                onChange={(e) => updateMatchingRule(index, "tolerance_value", parseFloat(e.target.value))}
+                                className="w-20 h-8"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => removeMatchingRule(index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <Card className="bg-muted/50">
+                  <CardContent className="p-6 text-center">
+                    <p className="text-muted-foreground">
+                      No matching rules defined. Add rules to configure how fields are compared.
+                    </p>
+                    <div className="mt-4 text-sm text-muted-foreground">
+                      <p className="font-medium mb-2">Example rules:</p>
+                      <ul className="space-y-1 text-left max-w-md mx-auto">
+                        <li>• invoice_number → Exact Match (Priority 1)</li>
+                        <li>• vendor_name → Fuzzy Match ≥80% (Priority 2)</li>
+                        <li>• total_amount → Numeric Tolerance ±5 (Priority 3)</li>
+                      </ul>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
 

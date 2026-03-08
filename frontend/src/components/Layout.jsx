@@ -12,6 +12,7 @@ import {
   Sun,
   Moon,
   ChevronLeft,
+  Files,
 } from "lucide-react";
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
   { path: "/configurations", label: "Configurations", icon: Settings },
   { path: "/workflow", label: "Workflow", icon: Workflow },
   { path: "/templates", label: "Templates", icon: FileText },
+  { path: "/documents", label: "Documents", icon: Files },
 ];
 
 export function Layout({ children, darkMode, setDarkMode }) {
