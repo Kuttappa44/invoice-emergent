@@ -1,34 +1,237 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
+/* App-specific styles */
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
+.app-container {
     min-height: 100vh;
+    display: flex;
+}
+
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Sidebar styles */
+.sidebar {
+    width: 280px;
+    transition: width 0.3s ease;
+}
+
+.sidebar.collapsed {
+    width: 80px;
+}
+
+/* Stats card gradient borders */
+.stats-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.stats-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: hsl(var(--primary));
+}
+
+.stats-card.accent::before {
+    background: hsl(var(--accent));
+}
+
+.stats-card.success::before {
+    background: hsl(var(--success));
+}
+
+.stats-card.warning::before {
+    background: hsl(var(--warning));
+}
+
+.stats-card.destructive::before {
+    background: hsl(var(--destructive));
+}
+
+/* Workflow stepper */
+.stepper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.step-number {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.step.active .step-number {
+    background: hsl(var(--primary));
+    color: white;
+}
+
+.step.completed .step-number {
+    background: hsl(var(--success));
+    color: white;
+}
+
+.step.pending .step-number {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+}
+
+.step-connector {
+    flex: 1;
+    height: 2px;
+    background: hsl(var(--border));
+}
+
+.step-connector.completed {
+    background: hsl(var(--success));
+}
+
+/* Document preview */
+.document-preview {
+    background: hsl(var(--muted));
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+.document-preview img,
+.document-preview iframe {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: var(--radius);
+}
+
+/* Live logs panel */
+.logs-panel {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.logs-panel .log-line {
+    padding: 0.25rem 1rem;
+    border-bottom: 1px solid hsl(var(--border));
+}
+
+.logs-panel .log-line:hover {
+    background: hsl(var(--muted));
+}
+
+.logs-panel .log-timestamp {
+    color: hsl(var(--muted-foreground));
+    margin-right: 0.75rem;
+}
+
+.logs-panel .log-info {
+    color: hsl(var(--info));
+}
+
+.logs-panel .log-success {
+    color: hsl(var(--success));
+}
+
+.logs-panel .log-warning {
+    color: hsl(var(--warning));
+}
+
+.logs-panel .log-error {
+    color: hsl(var(--destructive));
+}
+
+/* Field extraction form */
+.extraction-form .field-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-radius: var(--radius);
+    transition: background 0.2s;
+}
+
+.extraction-form .field-row:hover {
+    background: hsl(var(--muted));
+}
+
+.extraction-form .field-confidence {
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+}
+
+.extraction-form .field-confidence.high {
+    background: hsl(var(--success) / 0.1);
+    color: hsl(var(--success));
+}
+
+.extraction-form .field-confidence.medium {
+    background: hsl(var(--warning) / 0.1);
+    color: hsl(var(--warning));
+}
+
+.extraction-form .field-confidence.low {
+    background: hsl(var(--destructive) / 0.1);
+    color: hsl(var(--destructive));
+}
+
+/* Empty states */
+.empty-state {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+    padding: 4rem 2rem;
+    text-align: center;
 }
 
-.App-link {
-    color: #61dafb;
+.empty-state-icon {
+    width: 4rem;
+    height: 4rem;
+    margin-bottom: 1.5rem;
+    color: hsl(var(--muted-foreground));
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
+/* Pulse animation for processing */
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        opacity: 1;
     }
-    to {
-        transform: rotate(360deg);
+    100% {
+        transform: scale(2);
+        opacity: 0;
     }
+}
+
+.processing-indicator {
+    position: relative;
+}
+
+.processing-indicator::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: hsl(var(--accent));
+    animation: pulse-ring 1.5s ease-out infinite;
 }
