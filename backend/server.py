@@ -377,15 +377,17 @@ Common field types:
 
 def run_matching(extracted_data: Dict[str, Any], matching_config: MatchingLogicConfig, source_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Run matching logic against source data"""
-    if not source_data or not matching_config.matching_keys:
-        return {"status": "no_match", "matched_record": None, "score": 0}
+    if not source_data or not matching_config.rules:
+        return {"status": "no_match", "matched_record": None, "score": 0, "field_matches": {}}
     
     best_match = None
     best_score = 0
+    best_field_matches = {}
     
     for source_record in source_data:
         total_score = 0
-        matched_fields = 0
+        max_possible_score = 0
+        field_matches = {}
         
         for rule in matching_config.rules:
             field_name = rule.field_name
@@ -395,37 +397,64 @@ def run_matching(extracted_data: Dict[str, Any], matching_config: MatchingLogicC
             extracted_value = extracted_data.get(field_name)
             source_value = source_record.get(field_name)
             
+            # Weight based on priority (lower priority = higher weight)
+            weight = 1.0 / rule.priority if rule.priority > 0 else 1.0
+            max_possible_score += weight
+            
             if extracted_value is None or source_value is None:
+                field_matches[field_name] = {"extracted": extracted_value, "source": source_value, "score": 0, "match_type": rule.match_type}
                 continue
             
             score = 0
             if rule.match_type == "exact":
-                score = 1.0 if str(extracted_value) == str(source_value) else 0.0
+                score = 1.0 if str(extracted_value).strip() == str(source_value).strip() else 0.0
             elif rule.match_type == "case_insensitive":
-                score = 1.0 if str(extracted_value).lower() == str(source_value).lower() else 0.0
+                score = 1.0 if str(extracted_value).lower().strip() == str(source_value).lower().strip() else 0.0
             elif rule.match_type == "contains":
                 score = 1.0 if str(source_value).lower() in str(extracted_value).lower() else 0.0
             elif rule.match_type == "fuzzy":
-                # Simple fuzzy matching
                 from difflib import SequenceMatcher
-                ratio = SequenceMatcher(None, str(extracted_value).lower(), str(source_value).lower()).ratio()
-                score = ratio if ratio >= 0.8 else 0.0
+                ratio = SequenceMatcher(None, str(extracted_value).lower().strip(), str(source_value).lower().strip()).ratio()
+                score = ratio  # Use the actual ratio, not just binary
             elif rule.match_type == "numeric_tolerance":
                 try:
-                    diff = abs(float(extracted_value) - float(source_value))
+                    # Handle currency formatting
+                    extracted_num = float(str(extracted_value).replace(',', '').replace('$', '').replace('₹', ''))
+                    source_num = float(str(source_value).replace(',', '').replace('$', '').replace('₹', ''))
+                    diff = abs(extracted_num - source_num)
                     tolerance = rule.tolerance_value or 0
-                    score = 1.0 if diff <= tolerance else 0.0
+                    if diff <= tolerance:
+                        score = 1.0
+                    else:
+                        # Partial score based on how close it is
+                        score = max(0, 1.0 - (diff - tolerance) / (source_num + 0.01))
                 except (ValueError, TypeError):
                     score = 0.0
+            elif rule.match_type == "date_tolerance":
+                try:
+                    from dateutil.parser import parse
+                    extracted_date = parse(str(extracted_value))
+                    source_date = parse(str(source_value))
+                    diff_days = abs((extracted_date - source_date).days)
+                    tolerance = rule.tolerance_value or 0
+                    score = 1.0 if diff_days <= tolerance else 0.0
+                except:
+                    score = 0.0
             
-            total_score += score * (1.0 / rule.priority)
-            matched_fields += 1
+            field_matches[field_name] = {
+                "extracted": extracted_value,
+                "source": source_value,
+                "score": score,
+                "match_type": rule.match_type
+            }
+            total_score += score * weight
         
-        if matched_fields > 0:
-            avg_score = total_score / matched_fields
-            if avg_score > best_score:
-                best_score = avg_score
+        if max_possible_score > 0:
+            normalized_score = total_score / max_possible_score
+            if normalized_score > best_score:
+                best_score = normalized_score
                 best_match = source_record
+                best_field_matches = field_matches
     
     if best_score >= 0.9:
         status = "matched"
@@ -437,7 +466,8 @@ def run_matching(extracted_data: Dict[str, Any], matching_config: MatchingLogicC
     return {
         "status": status,
         "matched_record": best_match,
-        "score": best_score
+        "score": best_score,
+        "field_matches": best_field_matches
     }
 
 # ============= SSE FOR LOGS =============
@@ -1064,6 +1094,389 @@ async def export_documents(
         )
     
     return docs
+
+# ============= EMAIL CONNECTION =============
+
+import imaplib
+import email
+from email.header import decode_header
+
+class EmailConnection:
+    """IMAP email connection handler"""
+    
+    def __init__(self, config: EmailProviderConfig):
+        self.config = config
+        self.connection = None
+    
+    def connect(self) -> tuple:
+        """Connect to IMAP server. Returns (success, message)"""
+        try:
+            # Determine host based on provider
+            if self.config.provider_type == "gmail":
+                host = "imap.gmail.com"
+                port = 993
+            elif self.config.provider_type == "outlook":
+                host = "outlook.office365.com"
+                port = 993
+            else:
+                host = self.config.host
+                port = self.config.port or 993
+            
+            if not self.config.username or not self.config.password:
+                return False, "Email username and password are required"
+            
+            # Connect to IMAP server
+            if self.config.use_ssl:
+                self.connection = imaplib.IMAP4_SSL(host, port)
+            else:
+                self.connection = imaplib.IMAP4(host, port)
+            
+            # Login
+            self.connection.login(self.config.username, self.config.password)
+            
+            return True, f"Connected to {self.config.username}"
+            
+        except imaplib.IMAP4.error as e:
+            error_msg = str(e)
+            if "AUTHENTICATIONFAILED" in error_msg or "Invalid credentials" in error_msg.lower():
+                return False, "Authentication failed. Please check your email and app password."
+            return False, f"IMAP error: {error_msg}"
+        except Exception as e:
+            return False, f"Connection failed: {str(e)}"
+    
+    def disconnect(self):
+        """Disconnect from IMAP server"""
+        if self.connection:
+            try:
+                self.connection.logout()
+            except:
+                pass
+            self.connection = None
+    
+    def fetch_emails(self, date_from=None, date_to=None, sender_filter=None, subject_filter=None, limit=50):
+        """Fetch emails with attachments"""
+        if not self.connection:
+            return []
+        
+        try:
+            # Select inbox
+            self.connection.select("INBOX")
+            
+            # Build search criteria
+            criteria = []
+            if date_from:
+                criteria.append(f'SINCE {date_from.strftime("%d-%b-%Y")}')
+            if date_to:
+                criteria.append(f'BEFORE {date_to.strftime("%d-%b-%Y")}')
+            if sender_filter:
+                criteria.append(f'FROM "{sender_filter}"')
+            if subject_filter:
+                criteria.append(f'SUBJECT "{subject_filter}"')
+            
+            search_query = " ".join(criteria) if criteria else "ALL"
+            
+            # Search emails
+            status, messages = self.connection.search(None, search_query)
+            if status != "OK":
+                return []
+            
+            email_ids = messages[0].split()
+            emails_with_attachments = []
+            
+            # Process emails (most recent first, limited)
+            for email_id in reversed(email_ids[-limit:]):
+                status, msg_data = self.connection.fetch(email_id, "(RFC822)")
+                if status != "OK":
+                    continue
+                
+                raw_email = msg_data[0][1]
+                msg = email.message_from_bytes(raw_email)
+                
+                # Get email metadata
+                subject = self._decode_header(msg["Subject"])
+                sender = self._decode_header(msg["From"])
+                date_str = msg["Date"]
+                
+                # Parse date
+                try:
+                    from email.utils import parsedate_to_datetime
+                    email_date = parsedate_to_datetime(date_str)
+                except:
+                    email_date = datetime.now(timezone.utc)
+                
+                # Find attachments
+                attachments = []
+                for part in msg.walk():
+                    content_disposition = str(part.get("Content-Disposition"))
+                    if "attachment" in content_disposition:
+                        filename = part.get_filename()
+                        if filename:
+                            filename = self._decode_header(filename)
+                            # Only include supported file types
+                            ext = filename.split(".")[-1].lower() if "." in filename else ""
+                            if ext in ["pdf", "png", "jpg", "jpeg", "docx", "xlsx", "csv"]:
+                                attachments.append({
+                                    "filename": filename,
+                                    "content": part.get_payload(decode=True),
+                                    "content_type": part.get_content_type()
+                                })
+                
+                if attachments:
+                    emails_with_attachments.append({
+                        "subject": subject,
+                        "sender": sender,
+                        "date": email_date,
+                        "attachments": attachments
+                    })
+            
+            return emails_with_attachments
+            
+        except Exception as e:
+            logger.error(f"Error fetching emails: {e}")
+            return []
+    
+    def _decode_header(self, header_value):
+        """Decode email header value"""
+        if not header_value:
+            return ""
+        decoded_parts = decode_header(header_value)
+        decoded_string = ""
+        for part, encoding in decoded_parts:
+            if isinstance(part, bytes):
+                decoded_string += part.decode(encoding or "utf-8", errors="replace")
+            else:
+                decoded_string += part
+        return decoded_string
+
+# Test email connection endpoint
+@api_router.post("/configurations/{config_id}/test-email")
+async def test_email_connection(config_id: str):
+    """Test email connection for a configuration"""
+    config = await db.configurations.find_one({"id": config_id}, {"_id": 0})
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+    
+    email_config = EmailProviderConfig(**config.get("email_provider", {}))
+    
+    if not email_config.username or not email_config.password:
+        return {
+            "success": False,
+            "message": "Email username and password are required. Please configure them first."
+        }
+    
+    email_conn = EmailConnection(email_config)
+    success, message = email_conn.connect()
+    
+    if success:
+        email_conn.disconnect()
+    
+    return {
+        "success": success,
+        "message": message
+    }
+
+# Fetch emails endpoint
+@api_router.post("/configurations/{config_id}/fetch-emails")
+async def fetch_emails_from_config(
+    config_id: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    sender_filter: Optional[str] = None,
+    subject_filter: Optional[str] = None,
+    limit: int = 10
+):
+    """Fetch emails from configured email provider"""
+    config = await db.configurations.find_one({"id": config_id}, {"_id": 0})
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+    
+    email_config = EmailProviderConfig(**config.get("email_provider", {}))
+    
+    email_conn = EmailConnection(email_config)
+    success, message = email_conn.connect()
+    
+    if not success:
+        return {
+            "success": False,
+            "message": message,
+            "emails": []
+        }
+    
+    try:
+        # Parse dates
+        parsed_from = datetime.fromisoformat(date_from) if date_from else None
+        parsed_to = datetime.fromisoformat(date_to) if date_to else None
+        
+        emails = email_conn.fetch_emails(
+            date_from=parsed_from,
+            date_to=parsed_to,
+            sender_filter=sender_filter,
+            subject_filter=subject_filter,
+            limit=limit
+        )
+        
+        # Return email summaries (without actual content for preview)
+        email_summaries = []
+        for em in emails:
+            email_summaries.append({
+                "subject": em["subject"],
+                "sender": em["sender"],
+                "date": em["date"].isoformat(),
+                "attachment_count": len(em["attachments"]),
+                "attachments": [a["filename"] for a in em["attachments"]]
+            })
+        
+        return {
+            "success": True,
+            "message": f"Found {len(emails)} emails with attachments",
+            "emails": email_summaries
+        }
+        
+    finally:
+        email_conn.disconnect()
+
+# ============= MATCHING ENDPOINTS =============
+
+class MatchingSourceData(BaseModel):
+    """Model for matching source data upload"""
+    data: List[Dict[str, Any]]
+
+@api_router.post("/configurations/{config_id}/matching-source")
+async def upload_matching_source(config_id: str, source_data: MatchingSourceData):
+    """Upload matching source data (from CSV/Excel/API)"""
+    config = await db.configurations.find_one({"id": config_id}, {"_id": 0})
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+    
+    # Store the matching source data
+    await db.matching_sources.update_one(
+        {"configuration_id": config_id},
+        {"$set": {
+            "configuration_id": config_id,
+            "data": source_data.data,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }},
+        upsert=True
+    )
+    
+    return {
+        "message": f"Uploaded {len(source_data.data)} records for matching",
+        "record_count": len(source_data.data)
+    }
+
+@api_router.get("/configurations/{config_id}/matching-source")
+async def get_matching_source(config_id: str):
+    """Get matching source data for a configuration"""
+    source = await db.matching_sources.find_one({"configuration_id": config_id}, {"_id": 0})
+    if not source:
+        return {"data": [], "record_count": 0}
+    
+    return {
+        "data": source.get("data", []),
+        "record_count": len(source.get("data", [])),
+        "updated_at": source.get("updated_at")
+    }
+
+@api_router.post("/documents/{doc_id}/match")
+async def match_document(doc_id: str, config_id: str):
+    """Run matching on a single document"""
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    config = await db.configurations.find_one({"id": config_id}, {"_id": 0})
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+    
+    # Get matching source data
+    source = await db.matching_sources.find_one({"configuration_id": config_id}, {"_id": 0})
+    source_data = source.get("data", []) if source else []
+    
+    if not source_data:
+        return {
+            "status": "no_source",
+            "message": "No matching source data configured. Please upload source data first."
+        }
+    
+    # Get matching logic config
+    matching_logic = MatchingLogicConfig(**config.get("matching_logic", {}))
+    
+    if not matching_logic.rules:
+        return {
+            "status": "no_rules",
+            "message": "No matching rules configured. Please configure matching rules first."
+        }
+    
+    # Run matching
+    extracted_fields = doc.get("extracted_fields", {})
+    result = run_matching(extracted_fields, matching_logic, source_data)
+    
+    # Update document with matching results
+    await db.documents.update_one(
+        {"id": doc_id},
+        {"$set": {
+            "matching_status": result["status"],
+            "matching_results": result
+        }}
+    )
+    
+    return result
+
+@api_router.post("/workflows/{run_id}/match-all")
+async def match_all_documents(run_id: str, config_id: str):
+    """Run matching on all documents in a workflow run"""
+    config = await db.configurations.find_one({"id": config_id}, {"_id": 0})
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+    
+    # Get matching source data
+    source = await db.matching_sources.find_one({"configuration_id": config_id}, {"_id": 0})
+    source_data = source.get("data", []) if source else []
+    
+    if not source_data:
+        return {
+            "status": "no_source",
+            "message": "No matching source data configured",
+            "matched": 0, "partial": 0, "no_match": 0
+        }
+    
+    # Get matching logic config
+    matching_logic = MatchingLogicConfig(**config.get("matching_logic", {}))
+    
+    if not matching_logic.rules:
+        return {
+            "status": "no_rules",
+            "message": "No matching rules configured",
+            "matched": 0, "partial": 0, "no_match": 0
+        }
+    
+    # Get all documents for this workflow
+    docs = await db.documents.find({"workflow_run_id": run_id}, {"_id": 0}).to_list(1000)
+    
+    results = {"matched": 0, "partial_match": 0, "no_match": 0}
+    
+    for doc in docs:
+        extracted_fields = doc.get("extracted_fields", {})
+        if not extracted_fields:
+            continue
+            
+        result = run_matching(extracted_fields, matching_logic, source_data)
+        
+        await db.documents.update_one(
+            {"id": doc["id"]},
+            {"$set": {
+                "matching_status": result["status"],
+                "matching_results": result
+            }}
+        )
+        
+        results[result["status"]] = results.get(result["status"], 0) + 1
+    
+    return {
+        "status": "completed",
+        "message": f"Processed {len(docs)} documents",
+        **results
+    }
 
 # Include the router in the main app
 app.include_router(api_router)

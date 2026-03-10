@@ -217,6 +217,27 @@ export function Configurations() {
     }
   };
 
+  const testEmailConnection = async () => {
+    if (!selectedConfig) {
+      toast.error("Please save the configuration first before testing");
+      return;
+    }
+    
+    setTestingConnection(true);
+    try {
+      const response = await configurationsApi.testEmail(selectedConfig.id);
+      if (response.data.success) {
+        toast.success(response.data.message);
+      } else {
+        toast.error(response.data.message);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to test connection");
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
   const addMatchingRule = () => {
     setFormData((prev) => ({
       ...prev,
@@ -611,11 +632,29 @@ export function Configurations() {
               {formData.email_provider.username && formData.email_provider.password && (
                 <Card className="bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
                   <CardContent className="p-4">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                      <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                        Credentials configured for {formData.email_provider.username}
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                        <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                          Credentials configured for {formData.email_provider.username}
+                        </span>
+                      </div>
+                      {selectedConfig && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={testEmailConnection}
+                          disabled={testingConnection}
+                          data-testid="test-email-btn"
+                        >
+                          {testingConnection ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Mail className="h-4 w-4 mr-2" />
+                          )}
+                          Test Connection
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

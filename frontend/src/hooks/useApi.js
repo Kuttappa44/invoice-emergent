@@ -55,6 +55,13 @@ export const configurationsApi = {
   create: (data) => api.post("/configurations", data),
   update: (id, data) => api.put(`/configurations/${id}`, data),
   delete: (id) => api.delete(`/configurations/${id}`),
+  testEmail: (id) => api.post(`/configurations/${id}/test-email`),
+  fetchEmails: (id, params = {}) => {
+    const queryParams = new URLSearchParams(params).toString();
+    return api.post(`/configurations/${id}/fetch-emails${queryParams ? `?${queryParams}` : ""}`);
+  },
+  getMatchingSource: (id) => api.get(`/configurations/${id}/matching-source`),
+  uploadMatchingSource: (id, data) => api.post(`/configurations/${id}/matching-source`, { data }),
 };
 
 // Templates API
@@ -101,6 +108,7 @@ export const documentsApi = {
     const params = templateId ? `?template_id=${templateId}` : "";
     return api.post(`/documents/${id}/reextract${params}`);
   },
+  match: (id, configId) => api.post(`/documents/${id}/match?config_id=${configId}`),
   review: (id, action, updatedFields = null) => {
     const params = new URLSearchParams({ action });
     return api.put(`/documents/${id}/review?${params}`, updatedFields);

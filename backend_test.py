@@ -396,6 +396,143 @@ class DocumentExtractionAPITester:
             print("📤 Export functionality working")
         return success
 
+    def test_email_connection(self):
+        """Test email connection testing endpoint"""
+        # Use the provided test config ID
+        config_id = "e3376763-c35c-4e70-82d4-689ca1548ac9"
+        
+        success, response = self.run_test(
+            "Test Email Connection",
+            "POST",
+            f"configurations/{config_id}/test-email",
+            200
+        )
+        if success:
+            print(f"📧 Email test result: {response.get('message', 'No message')}")
+            if response.get('success'):
+                print("✅ Email connection successful")
+            else:
+                print("⚠️ Email connection failed (expected if no credentials configured)")
+        return success
+
+    def test_matching_functionality(self):
+        """Test document matching functionality"""
+        # First get documents
+        success, documents = self.run_test(
+            "List Documents for Matching",
+            "GET",
+            "documents",
+            200
+        )
+        if not success:
+            return False
+            
+        if not documents:
+            print("⚠️ No documents available for matching test")
+            return True  # Skip matching test if no documents
+            
+        doc_id = documents[0].get('id')
+        config_id = "e3376763-c35c-4e70-82d4-689ca1548ac9"
+        
+        if doc_id:
+            success, response = self.run_test(
+                "Test Document Matching",
+                "POST",
+                f"documents/{doc_id}/match?config_id={config_id}",
+                200
+            )
+            if success:
+                status = response.get('status', 'unknown')
+                print(f"🔗 Matching result: {status}")
+                if 'score' in response:
+                    score = response['score'] * 100
+                    print(f"📊 Matching score: {score:.1f}%")
+            return success
+        else:
+            print("⚠️ No document ID available for matching test")
+            return True
+
+    def test_document_reextraction(self):
+        """Test document re-extraction functionality"""
+        # First get documents
+        success, documents = self.run_test(
+            "List Documents for Re-extraction",
+            "GET", 
+            "documents",
+            200
+        )
+        if not success:
+            return False
+            
+        if not documents:
+            print("⚠️ No documents available for re-extraction test")
+            return True
+            
+        doc_id = documents[0].get('id')
+        
+        if doc_id:
+            success, response = self.run_test(
+                "Test Document Re-extraction",
+                "POST",
+                f"documents/{doc_id}/reextract",
+                200
+            )
+            if success:
+                extracted_fields = response.get('extracted_fields', {})
+                print(f"🔄 Re-extracted {len(extracted_fields)} fields")
+            return success
+        else:
+            print("⚠️ No document ID available for re-extraction test")
+            return True
+
+    def test_matching_source_data(self):
+        """Test matching source data upload and retrieval"""
+        config_id = "e3376763-c35c-4e70-82d4-689ca1548ac9"
+        
+        # Test sample matching data with the invoice numbers mentioned in the context
+        sample_data = [
+            {
+                "invoice_number": "1534FMBIL0001803",
+                "vendor_name": "Test Vendor 1",
+                "total_amount": 1250.00,
+                "date": "2024-12-20"
+            },
+            {
+                "invoice_number": "1534FMBIL0001422", 
+                "vendor_name": "Test Vendor 2",
+                "total_amount": 890.50,
+                "date": "2024-12-21"
+            }
+        ]
+        
+        # Upload matching source data
+        success, response = self.run_test(
+            "Upload Matching Source Data",
+            "POST",
+            f"configurations/{config_id}/matching-source",
+            200,
+            {"data": sample_data}
+        )
+        if success:
+            record_count = response.get('record_count', 0)
+            print(f"📤 Uploaded {record_count} matching records")
+        
+        if not success:
+            return False
+            
+        # Get matching source data
+        success, response = self.run_test(
+            "Get Matching Source Data",
+            "GET",
+            f"configurations/{config_id}/matching-source",
+            200
+        )
+        if success:
+            data_count = response.get('record_count', 0)
+            print(f"📥 Retrieved {data_count} matching records")
+            
+        return success
+
     def get_configurations(self):
         """Helper to get existing configurations"""
         try:
@@ -450,6 +587,10 @@ def main():
         ("Workflow Management", tester.test_workflow_management),
         ("Document Upload", tester.test_document_upload),
         ("Export Functionality", tester.test_export_functionality),
+        ("Email Connection Test", tester.test_email_connection),
+        ("Matching Source Data", tester.test_matching_source_data),
+        ("Document Matching", tester.test_matching_functionality),
+        ("Document Re-extraction", tester.test_document_reextraction),
     ]
     
     failed_tests = []

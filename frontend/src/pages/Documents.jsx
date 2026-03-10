@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { documentsApi, templatesApi } from "../hooks/useApi";
+import { documentsApi, configurationsApi } from "../hooks/useApi";
 import { cn, formatDateTime, getStatusColor, getConfidenceLevel, truncateText } from "../lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -50,19 +50,25 @@ import {
   RefreshCw,
   Search,
   ChevronRight,
+  Link2,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 export function Documents() {
   const [documents, setDocuments] = useState([]);
+  const [configurations, setConfigurations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedConfigId, setSelectedConfigId] = useState(null);
+  const [matching, setMatching] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     fetchDocuments();
+    fetchConfigurations();
   }, []);
 
   const fetchDocuments = async () => {
@@ -74,6 +80,52 @@ export function Documents() {
       toast.error("Failed to load documents");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchConfigurations = async () => {
+    try {
+      const response = await configurationsApi.list();
+      setConfigurations(response.data);
+      if (response.data.length > 0) {
+        setSelectedConfigId(response.data[0].id);
+      }
+    } catch (error) {
+      console.error("Failed to load configurations");
+    }
+  };
+
+  const handleRunMatching = async (docId) => {
+    if (!selectedConfigId) {
+      toast.error("Please select a configuration first");
+      return;
+    }
+    
+    setMatching(true);
+    try {
+      const response = await documentsApi.match(docId, selectedConfigId);
+      
+      setDocuments((prev) =>
+        prev.map((d) =>
+          d.id === docId
+            ? { ...d, matching_status: response.data.status, matching_results: response.data }
+            : d
+        )
+      );
+      
+      if (selectedDocument?.id === docId) {
+        setSelectedDocument((prev) => ({
+          ...prev,
+          matching_status: response.data.status,
+          matching_results: response.data,
+        }));
+      }
+      
+      toast.success(`Matching complete: ${response.data.status} (${(response.data.score * 100).toFixed(0)}%)`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Matching failed");
+    } finally {
+      setMatching(false);
     }
   };
 
@@ -202,6 +254,20 @@ export function Documents() {
                 <SelectItem value="flagged">Flagged</SelectItem>
               </SelectContent>
             </Select>
+            {configurations.length > 0 && (
+              <Select value={selectedConfigId} onValueChange={setSelectedConfigId}>
+                <SelectTrigger className="w-[200px]" data-testid="config-filter">
+                  <SelectValue placeholder="Select config for matching" />
+                </SelectTrigger>
+                <SelectContent>
+                  {configurations.map((config) => (
+                    <SelectItem key={config.id} value={config.id}>
+                      {config.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -396,12 +462,46 @@ export function Documents() {
               {selectedDocument.matching_results && Object.keys(selectedDocument.matching_results).length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Matching Results</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium">Matching Results</CardTitle>
+                      <Badge className={getStatusColor(selectedDocument.matching_results.status)}>
+                        {selectedDocument.matching_results.status} ({(selectedDocument.matching_results.score * 100).toFixed(0)}%)
+                      </Badge>
+                    </div>
                   </CardHeader>
-                  <CardContent>
-                    <pre className="bg-muted p-3 rounded-lg text-xs overflow-x-auto">
-                      {JSON.stringify(selectedDocument.matching_results, null, 2)}
-                    </pre>
+                  <CardContent className="space-y-3">
+                    {selectedDocument.matching_results.field_matches && (
+                      <div className="space-y-2">
+                        {Object.entries(selectedDocument.matching_results.field_matches).map(([field, info]) => (
+                          <div key={field} className="p-2 rounded border bg-muted/30">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-medium uppercase">{field}</span>
+                              <Badge variant={info.score >= 0.9 ? "default" : info.score >= 0.5 ? "secondary" : "destructive"} className="text-xs">
+                                {(info.score * 100).toFixed(0)}%
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <span className="text-muted-foreground">Extracted:</span>
+                                <span className="ml-1 font-mono">{String(info.extracted)}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Source:</span>
+                                <span className="ml-1 font-mono">{String(info.source)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {selectedDocument.matching_results.matched_record && (
+                      <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                        <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">Matched Record:</p>
+                        <pre className="text-xs mt-1 overflow-x-auto text-emerald-700 dark:text-emerald-300">
+                          {JSON.stringify(selectedDocument.matching_results.matched_record, null, 2)}
+                        </pre>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -417,6 +517,22 @@ export function Documents() {
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Re-extract with AI
+                </Button>
+                
+                {/* Run Matching button */}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleRunMatching(selectedDocument.id)}
+                  disabled={matching || !selectedConfigId || !Object.keys(selectedDocument.extracted_fields || {}).length}
+                  data-testid="run-matching-btn"
+                >
+                  {matching ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Link2 className="h-4 w-4 mr-2" />
+                  )}
+                  Run Matching
                 </Button>
                 
                 <div className="flex gap-2">
